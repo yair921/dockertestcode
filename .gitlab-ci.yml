@@ -1,0 +1,105 @@
+# image: node:latest
+
+# stages:
+#   - build
+#   - test
+
+# cache:
+#   paths:
+#     - node_modules/
+
+# install_dependencies:
+#   stage: build
+#   script:
+#     - npm install
+
+# testing:
+#   stage: test
+#   script: npm run test:ci
+
+
+image: node:latest
+# Defines the steps
+stages:
+  - build
+  - test
+  - containerization
+  - deploy
+
+# add to keep the packages in the process.
+cache:
+  paths:
+    - node_modules/
+
+building:
+  stage: build
+  script:
+    - npm install
+
+# testing:
+#   dependencies: 
+#     - building
+#   stage: test
+#   script: npm run test:ci
+
+containerization:
+  image: docker:latest
+  #image: gitlab/dind
+  stage: containerization # must match the stage name declared above
+  services:
+    - docker:dind
+  before_script:
+    # Add docker-hub credentials 
+    #- docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
+    - echo "$DOCKER_HUB_PASSWORD" | docker login -u "$DOCKER_HUB_USER" --password-stdin
+  script:
+    #- systemctl start docker
+    # Build the container image
+    - docker build --pull -t "$CI_REGISTRY_IMAGE" .
+    #- docker build --pull -t dockertestcode .
+    # Add Tag
+    - docker tag "$CI_REGISTRY_IMAGE" "$DOCKER_HUB_USER"/"$CI_REGISTRY_IMAGE":"$CI_COMMIT_SHA"
+    #- docker tag dockertestcode yairmontes/dockertestcode
+    # Push the container image to the registry
+    #- docker push yairmontes/dockertestcode
+    - docker push "$DOCKER_HUB_USER"/"$CI_REGISTRY_IMAGE":"$CI_COMMIT_SHA"
+    # Cleanup by removing the local image
+    #- docker image rm yairmontes/"$CI_REGISTRY_IMAGE"
+  #variables to deploy -- new
+  variables:
+  #    DOCKER_HOST: tcp://localhost:2375
+      DOCKER_TLS_CERTDIR: ""
+
+
+deployment:
+  stage: deploy # must match the stage name declared above
+  image: 
+    name: bitnami/kubectl:1.14
+    entrypoint: [""]
+  script:
+    - kubectl get deployment dockertestcode || kubectl create deployment dockertestcode --image="$DOCKER_HUB_USER"/"$CI_REGISTRY_IMAGE":"$CI_COMMIT_SHA"
+    - kubectl set image deployment/dockertestcode dockertestcode="$DOCKER_HUB_USER"/"$CI_REGISTRY_IMAGE":"$CI_COMMIT_SHA"
+    # create/update the kubernetes resources
+    - kubectl apply -f kubernetes_manifest.yml
+    # Restart the deployment so as to pull the latest version of the container image
+    #- kubectl rollout restart deployment/dockertestcode
+  environment:
+    name: production
+
+
+# deployment:
+#   stage: deploy # must match the stage name declared above
+#   image: 
+#     name: bitnami/kubectl:1.14
+#     entrypoint: [""]
+#   script:
+#     - kubectl get deployment dockertestcode || kubectl create deployment dockertestcode --image="$DOCKER_HUB_USER"/"$CI_REGISTRY_IMAGE":"$CI_COMMIT_SHA"
+#     - kubectl set image yairmontes/dockertestcode dockertestcode="$DOCKER_HUB_USER"/"$CI_REGISTRY_IMAGE":"$CI_COMMIT_SHA"
+#     # create/update the kubernetes resources
+#     #- kubectl apply -f kubernetes_manifest.yml
+#     # Restart the deployment so as to pull the latest version of the container image
+#     #- kubectl rollout restart deployment/dockertestcode
+#   only: 
+#     - master
+#   environment:
+#     name: production
