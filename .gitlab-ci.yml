@@ -67,8 +67,8 @@ containerization:
     #- docker image rm yairmontes/"$CI_REGISTRY_IMAGE"
   #variables to deploy -- new
   variables:
-  #    DOCKER_HOST: tcp://localhost:2375
-      DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: tcp://docker:2375
+      #DOCKER_TLS_CERTDIR: ""
 
 
 deployment:
